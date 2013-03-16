@@ -12,6 +12,7 @@ Packet class module
 This class defines the packet types and operations
 """
 import os
+import time
 
 #Currently Supported Data Formats
 supportedFormats = [2,7,8]
@@ -126,29 +127,42 @@ class Packet(object):
         """
         pass
         
+        #Set freezeout for when we find get a valid checksum
+        freezeout = 0
+        correctBytes=0
+        incorrectBytes=0
+        
         for index, byte in enumerate(data):
-            #Check if the first byte matches the status byte of the communication protocol
-            print "Byte: %s, Index: %s, Type(Byte): %s" % (byte,index,type(byte))
-            #Calculate and verify the checksum
-            try:
-                frame = [byte,data[index+1],data[index+2],data[index+3],data[index+4]]
-                print "Getting from data: %s" % frame
-            except IndexError:
-                print ""
-            
-            #Convert each byte into correct type (avoid strings)
-            for j,frameByte in enumerate(frame):
-                if type(frameByte) == str:
-                    frame[j] = int(frameByte.encode('hex'),16)
-                    print "Progressive Frame (%s,%s):%s" % (j,type(frameByte),frame[j])
-            
-            print "Converted frame:%s" % frame
+            #print "Byte: %s (%s), Index: %s, Type(Byte): %s, FreezeOut: %s" % (byte,byte.encode('hex'),index,type(byte), freezeout)
+            #freeze out operations for 4 bytes if a correct checksum was found previously
+            if freezeout == 0:
+                #Make frame
+                try:
+                    frame = [byte,data[index+1],data[index+2],data[index+3],data[index+4]]
+                except IndexError:
+                    print "ERROR: Data truncated"
+                    
+                #Convert each byte into correct type (avoid strings)
+                for j,frameByte in enumerate(frame):
+                    if type(frameByte) == str:
+                        frame[j] = int(frameByte.encode('hex'),16)
+                        #print "Progressive Frame (%s,%s):%s" % (j,type(frameByte),frame[j])
+                #print "Converted frame:%s" % frame
                 
-            #Verify Checksum
-            if self._verifyChecksum(frame):
-                print "YAAAAAAAAAAAAAAAAY Checksum is correct"
+                #Verify Checksum
+                if self._verifyChecksum(frame):
+                    #Set the 4byte freezeout (to make processing faster)
+                    correctBytes+=1
+                    freezeout = 4
+                else:
+                    #Reset freezeout
+                    incorrectBytes+=1
+                    freezeout = 0
+                    
             else:
-                print "Checksum is NOT correct"
+                freezeout-=1
+        
+        print "Correct: %s | Incorrect Bytes: %s | Total: %s" % (correctBytes,incorrectBytes,len(data))
                 
     def _verifyChecksum(self, frameBytes):
         """
@@ -160,12 +174,13 @@ class Packet(object):
         #print "Types: %s %s %s %s" % (type(frameBytes[0]),type(frameBytes[1]),type(frameBytes[2]),type(frameBytes[3]))
         
         calc = frameBytes[0]+frameBytes[1]+frameBytes[2]+frameBytes[3]
+        hexCalc = hex(calc)
         #DEBUG
         #print "Passed as arg:%s" % (frameBytes)
         #print "Adding up: %s,%s,%s,%s" % (frameBytes[0],frameBytes[1],frameBytes[2],frameBytes[3])
-        #print "Calculated Check: %s, Read Checksum: %s" % (hex(calc)[2:], hex(frameBytes[4])[2:])
+        #print "Calculated Check: 0x%s (%s), Read Checksum: %s (%s)" % (hexCalc[len(hexCalc)-2:],calc,hex(frameBytes[4]),frameBytes[4])
         
-        if hex(calc)[2:] == hex(frameBytes[4])[2:]:
+        if hexCalc[len(hexCalc)-2:] == hex(frameBytes[4])[2:]:
             return True
         else:
             return False
@@ -194,3 +209,9 @@ class Packet(object):
             return data
         else:
             print "ERROR: Read 0 bytes from the file"
+    
+    def _fromSerial(self):
+        """
+        Connects to the device's serial port and retrieves data
+        """
+        pass
